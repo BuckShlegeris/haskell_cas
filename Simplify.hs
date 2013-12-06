@@ -1,4 +1,5 @@
-{-# Language OverloadedStrings, TypeSynonymInstances, FlexibleInstances#-}
+{-# Language OverloadedStrings, TypeSynonymInstances, FlexibleInstances #-}
+-- {-# OPTIONS_GHC -fno-warn-overlapping-patterns #-}
 
 module Simplify
     (canonicalize,
@@ -18,7 +19,17 @@ canonicalize exp = case exp of
     Var x -> Var x
     Sum stuff -> canonicalizeSum (map canonicalize stuff)
     Prod stuff -> canonicalizeProduct (map canonicalize stuff)
-    Power bottom top -> Power bottom top
+    Power bottom top -> canonicalizePower (canonicalize bottom) (canonicalize top)
+
+canonicalizePower :: Expression -> Expression -> Expression
+canonicalizePower bottom top = case (bottom, top) of
+                (0, 0)                  -> undefined
+                (_, 0)                  -> 1
+                (_, 1)                  -> bottom
+                (Power bottom2 top2, _) -> (Power bottom2 (canonicalize $ top * top2))
+                (_, _)                  -> Power bottom top
+
+
 
 canonicalizeProduct :: [Expression] -> Expression
 canonicalizeProduct stuff = packageExpsIntoProduct $ collectIntoPowers
@@ -62,7 +73,7 @@ canonicalizeSum = packageTermsInSum . packageMap . collectTerms . extractConstan
         flattenSum (Sum stuff:xs) = stuff ++ flattenSum xs
         flattenSum (x:xs) = x : flattenSum xs
 
-        packageMap :: M.Map Expression Integer -> [Expression]
+        packageMap :: M.Map Expression Double -> [Expression]
         packageMap mapping = concatMap packageItem (M.toList mapping)
             where
                 packageItem (k,v) = case (k,v) of
@@ -74,35 +85,35 @@ canonicalizeSum = packageTermsInSum . packageMap . collectTerms . extractConstan
                     (x,y) -> [Prod [x,Num y]]
 
 
-        collectTerms :: [(Integer, Expression)] -> M.Map Expression Integer
+        collectTerms :: [(Double, Expression)] -> M.Map Expression Double
         collectTerms exps = foldl (<<) M.empty exps
             where
-                (<<) :: M.Map Expression Integer -> (Integer, Expression) ->
-                                    M.Map Expression Integer
+                (<<) :: M.Map Expression Double -> (Double, Expression) ->
+                                    M.Map Expression Double
                 mapping << (n,item) = M.insert item
                                 (n + M.findWithDefault 0 item mapping) mapping
 
-extractConstants :: [Expression] -> [(Integer, Expression)]
+extractConstants :: [Expression] -> [(Double, Expression)]
 extractConstants x = map extractConstant x
     where
-        extractConstant :: Expression -> (Integer, Expression)
+        extractConstant :: Expression -> (Double, Expression)
         extractConstant (Prod stuff) = (x,packageExpsIntoProduct y)
                 where (x,y) = takeOutConstantFactor stuff
         extractConstant (Num x) = (x, 1)
         extractConstant exp = (1,exp)
 
 
-runLengthEncode :: Eq x => [x] -> [(Integer, x)]
+runLengthEncode :: Eq x => [x] -> [(Double, x)]
 runLengthEncode [] = []
 runLengthEncode (x:xs) = runLengthEncode' x 1 xs
     where
-        runLengthEncode' :: Eq x => x -> Integer -> [x] -> [(Integer, x)]
+        runLengthEncode' :: Eq x => x -> Double -> [x] -> [(Double, x)]
         runLengthEncode' x n [] = [(n,x)]
         runLengthEncode' x n (y:ys)
             | x == y    = runLengthEncode' x (n+1) ys
             | otherwise = (n,x):runLengthEncode' y 1 ys
 
-takeOutConstantFactor :: [Expression] -> (Integer, [Expression])
+takeOutConstantFactor :: [Expression] -> (Double, [Expression])
 takeOutConstantFactor terms = (coefficient, otherTerms)
     where
         (nums, otherTerms) = partition isConstant terms
@@ -139,3 +150,4 @@ distributeEverything (sum:xs) = do
                     y <- distributeEverything xs
                     return (x:y)
 
+main = print $ canonicalize $  (("x" ** "y") ** "z" :: Expression)

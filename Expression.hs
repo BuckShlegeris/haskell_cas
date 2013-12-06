@@ -2,7 +2,8 @@
 
 module Expression
     (Expression (..),
-    isConstant)
+    isConstant,
+    Name)
 
 where
 
@@ -11,7 +12,7 @@ import Data.List (intersperse)
 
 type Name = String
 
-data Expression = Num Integer
+data Expression = Num Double
                 | Var Name
                 | Sum [Expression]
                 | Prod [Expression]
@@ -30,7 +31,7 @@ instance Num Expression where
     a + b = Sum [a, b]
     a - b = Sum [a, Prod[-1,b]]
     a * b = Prod [a,b]
-    fromInteger x = Num x
+    fromInteger x = Num (fromIntegral x)
     abs = id
     signum x = 1
 

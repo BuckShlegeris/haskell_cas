@@ -1,3 +1,5 @@
+{-# Language OverloadedStrings, TypeSynonymInstances, FlexibleInstances#-}
+
 module Calculus
     (diff)
 
