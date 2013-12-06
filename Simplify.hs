@@ -1,66 +1,28 @@
 {-# Language OverloadedStrings, TypeSynonymInstances, FlexibleInstances#-}
 
-import Data.List
-import Data.String
-import Control.Monad
+module Simplify
+    (canonicalize,
+    expand)
+where
+
+import Data.List (sort, partition)
 import Debug.Trace (traceShow)
 import qualified Data.Map as M
+import Expression
 
-p x = traceShow x x
-
-type Name = String
-
-data Expression = Num Integer
-                | Var Name
-                | Sum [Expression]
-                | Prod [Expression]
-                | Power Expression Expression
-        deriving (Eq, Ord)
-
-instance Show Expression where
-    show exp = case exp of
-        Num x -> show x
-        Var name -> name
-        Sum stuff -> "(" ++ concat (intersperse "+" (map show stuff)) ++ ")"
-        Prod stuff -> "(" ++ concat (intersperse "*" (map show stuff)) ++ ")"
-        Power bottom top -> "(" ++ show bottom ++ "**" ++ show top ++ ")"
-
-instance Num Expression where
-    a + b = Sum [a, b]
-    a - b = Sum [a, Prod[-1,b]]
-    a * b = Prod [a,b]
-    fromInteger x = Num x
-    abs = id
-    signum x = 1
-
-instance IsString Expression
-    where fromString x = Var x
-
-isConstant (Num x) = True
-isConstant _ = False
-
-diff :: Name -> Expression -> Expression
-diff var exp = case exp of
-    Num _ -> 0
-    Var name
-        | var == name -> 1
-        | otherwise -> 0
-    Sum stuff -> Sum (map (diff var) stuff)
-    Prod [] -> 0
-    Prod [x] -> diff var x
-    Prod (x:xs) -> (diff var x * Prod xs) + (x * diff var (Prod xs))
+-- p x = traceShow x x
 
 canonicalize :: Expression -> Expression
 canonicalize exp = case exp of
     Num x -> Num x
     Var x -> Var x
-    Sum stuff -> canonicalizeSum stuff
-    Prod stuff -> canonicalizeProduct stuff
+    Sum stuff -> canonicalizeSum (map canonicalize stuff)
+    Prod stuff -> canonicalizeProduct (map canonicalize stuff)
     Power bottom top -> Power bottom top
 
 canonicalizeProduct :: [Expression] -> Expression
 canonicalizeProduct stuff = packageExpsIntoProduct $ collectIntoPowers
-    $ simplifyTerms $ sort $ flattenProduct $ map canonicalize $ stuff
+    $ simplifyTerms $ sort $ flattenProduct $ stuff
     where
         flattenProduct :: [Expression] -> [Expression]
         flattenProduct [] = []
@@ -84,31 +46,41 @@ packageExpsIntoProduct exps = case exps of
     [x] -> x
     _ -> Prod exps
 
+
+packageTermsInSum :: [Expression] -> Expression
+packageTermsInSum terms = case terms of
+    [] -> 0
+    [x] -> x
+    _ -> Sum terms
+
 canonicalizeSum :: [Expression] -> Expression
-canonicalizeSum = packageTerms . packageMap . collectTerms . extractConstants
-           . flattenSum . sort . map canonicalize
+canonicalizeSum = packageTermsInSum . packageMap . collectTerms . extractConstants
+           . flattenSum . sort
     where
         flattenSum :: [Expression] -> [Expression]
         flattenSum [] = []
         flattenSum (Sum stuff:xs) = stuff ++ flattenSum xs
         flattenSum (x:xs) = x : flattenSum xs
 
-        packageTerms :: [Expression] -> Expression
-        packageTerms terms = case terms of
-            [] -> 0
-            [x] -> x
-            _ -> Sum terms
-
         packageMap :: M.Map Expression Integer -> [Expression]
-        packageMap mapping = do
-            (k, v) <- M.toList mapping
-            guard $ v /= 0
-            guard $ k /= Prod []
-            return $ if v == 1 then k else Prod [Num v,k]
+        packageMap mapping = concatMap packageItem (M.toList mapping)
+            where
+                packageItem (k,v) = case (k,v) of
+                    (_,0) -> []
+                    (Prod [], v) -> [Num v]
+                    (k, 1) -> [k]
+                    (Num x, y) -> [Num (x*y)]
+                    (Prod x,y) -> [Prod (Num y:x)]
+                    (x,y) -> [Prod [x,Num y]]
 
 
         collectTerms :: [(Integer, Expression)] -> M.Map Expression Integer
         collectTerms exps = foldl (<<) M.empty exps
+            where
+                (<<) :: M.Map Expression Integer -> (Integer, Expression) ->
+                                    M.Map Expression Integer
+                mapping << (n,item) = M.insert item
+                                (n + M.findWithDefault 0 item mapping) mapping
 
 extractConstants :: [Expression] -> [(Integer, Expression)]
 extractConstants x = map extractConstant x
@@ -142,8 +114,28 @@ distribute xs ys = do
         y <- ys
         return $ x * y
 
-(<<) :: M.Map Expression Integer -> (Integer, Expression) -> M.Map Expression Integer
-mapping << (n,item) = M.insert item (n + M.findWithDefault 0 item mapping) mapping
+-- We assume this has already been canonicalized
+expand :: Expression -> Expression
+expand (Prod stuff) = (canonicalizeSum . map canonicalize . map packageExpsIntoProduct .
+            distributeEverything . makeProductOfSums . map (canonicalize . expand))
+                    stuff
+expand (Sum stuff) = canonicalize $ Sum $ map expand stuff
+expand x = x
 
+makeProductOfSums :: [Expression] -> [[Expression]]
+makeProductOfSums stuff = map granularize stuff
+    where
+        granularize :: Expression -> [Expression]
+        granularize (Prod x) = error "oh god, oh god"
+        granularize (Sum x) = x
+        granularize x = [x]
 
-main = return $ canonicalize $ ("x" + "y") * ("x" + "y")
+-- distributeEverything takes a product of sums and turns it into a sum of products
+distributeEverything :: [[Expression]] -> [[Expression]]
+distributeEverything [] = []
+distributeEverything [sum] = map return sum
+distributeEverything (sum:xs) = do
+                    x <- sum
+                    y <- distributeEverything xs
+                    return (x:y)
+
