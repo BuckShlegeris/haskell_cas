@@ -11,7 +11,7 @@ import Debug.Trace (traceShow)
 import qualified Data.Map as M
 import Expression
 
--- p x = traceShow x x
+p x = traceShow x x
 
 canonicalize :: Expression -> Expression
 canonicalize exp = case exp of
@@ -23,7 +23,9 @@ canonicalize exp = case exp of
 
 canonicalizePower :: Expression -> Expression -> Expression
 canonicalizePower bottom top = case (bottom, top) of
-                (0, 0)                  -> undefined
+                (0, 0)                  -> 1 -- THIS IS REALLY SKETCHY
+                (0, _)                  -> 0
+                (1, _)                  -> 1
                 (_, 0)                  -> 1
                 (_, 1)                  -> bottom
                 (Power bottom2 top2, _) -> (Power bottom2 (canonicalize $ top * top2))
@@ -150,4 +152,4 @@ distributeEverything (sum:xs) = do
                     y <- distributeEverything xs
                     return (x:y)
 
-main = print $ canonicalize $  (("x" ** "y") ** "z" :: Expression)
+main = print $ expand $ canonicalize $  "x" + "x" + "x"
