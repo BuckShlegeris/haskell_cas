@@ -14,6 +14,12 @@ weave [x] = x
 weave ([]:xs) = weave xs
 weave ((x:xs):ys) = x:(weave (ys++[xs]))
 
+weightedWeave :: [(Int,[a])] -> [a]
+weightedWeave [] = []
+weightedWeave [(n,x)] = x
+weightedWeave ((_,[]):xs) = weightedWeave xs
+weightedWeave ((n,x):xs) = (take n x) ++ (weightedWeave (xs ++ [(n,drop n x)]))
+
 -- weaveInfinite takes an infinite list of infinite lists
 weaveInfinite :: [[a]] -> [a]
 weaveInfinite list = diagonalize (\(x,y) -> list!!x !!y) [0..] [0..]

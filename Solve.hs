@@ -16,14 +16,14 @@ solve name = solve2 name . canonicalize
 
 solve2 :: Name -> Expression -> [Expression]
 solve2 name exp = case expand exp of
-        Var x -> [Num 1]
+        Var x -> [Num 0]
         Num y -> [Num y]
         Power bottom top
-            | contains_variable name bottom -> do
+            | containsVariable name bottom -> do
                             solution <- (solve2 name bottom)
                             return $ Power solution (1/top)
             | otherwise -> error "Solver not implemented"
-        Prod stuff -> solveProd name (partition (contains_variable name) stuff)
+        Prod stuff -> solveProd name (partition (containsVariable name) stuff)
         _ -> error "Solver not implemented"
 
 solveProd :: Name -> ([Expression], [Expression]) -> [Expression]
@@ -34,14 +34,36 @@ solveProd name (terms_with_name, others) = case (terms_with_name) of
                             return $ Prod (solution:(map (\x -> 1/x) others))
                     _ -> error "Probably can't solve"
 
-
-contains_variable :: Name -> Expression -> Bool
-contains_variable name exp = case exp of
+containsVariable :: Name -> Expression -> Bool
+containsVariable name exp = case exp of
         Var x -> x == name
         Num _ -> False
-        Power bottom top -> contains_variable name bottom ||
-                                 contains_variable name top
-        Sum stuff -> any (contains_variable name) stuff
-        Prod stuff -> any (contains_variable name) stuff
+        Power bottom top -> containsVariable name bottom ||
+                                 containsVariable name top
+        Sum stuff -> any (containsVariable name) stuff
+        Prod stuff -> any (containsVariable name) stuff
 
-main = print (solve ("x" :: Name) $ "x" * 2)
+--collect sums:
+-- [x, x**2, 2**x, y*x, 2, 4*x**2]
+--becomes
+
+-- [x : 1+y,
+-- x**2 : 1+4,
+-- 2**x : 1,
+-- 1 : 2]
+
+--now.
+
+extractVariableFromExpressions :: Name -> Expression -> (Expression,Expression)
+extractVariableFromExpressions = undefined
+
+collectSums :: Name -> [Expression] -> ([(Expression, Expression)], Expression)
+collectSums name stuff = undefined
+
+-- ([("m", "g"*"h"*"EK"**-1)], -1)
+
+--solveSum :: Name -> [Expression] -> [Expression]
+--solveSum name stuff = case (collectSums stuff) of
+--            ([()]) -> undefined
+
+main = print (solve2 ("x" :: Name) ("x" + "x") ("y"))

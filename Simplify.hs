@@ -43,9 +43,10 @@ canonicalizeProduct stuff = packageExpsIntoProduct $ collectIntoPowers
         flattenProduct (x:xs) = x : flattenProduct xs
 
         simplifyTerms :: [Expression] -> [Expression]
-        simplifyTerms terms = if coefficient==1
-                              then otherTerms
-                              else (Num coefficient : otherTerms)
+        simplifyTerms terms
+                | coefficient == 1 = otherTerms
+                | coefficient == 0 = []
+                | otherwise = (Num coefficient : otherTerms)
             where (coefficient, otherTerms) = takeOutConstantFactor terms
 
         collectIntoPowers :: [Expression] -> [Expression]
@@ -85,7 +86,6 @@ canonicalizeSum = packageTermsInSum . packageMap . collectTerms . extractConstan
                     (Num x, y) -> [Num (x*y)]
                     (Prod x,y) -> [Prod (Num y:x)]
                     (x,y) -> [Prod [x,Num y]]
-
 
         collectTerms :: [(Double, Expression)] -> M.Map Expression Double
         collectTerms exps = foldl (<<) M.empty exps
